@@ -1,0 +1,136 @@
+-- 1 
+-- For each topic, find the total number of blurts that were analyzed as being
+-- related to the topic. Order the result by topic id. Your SQL query should print
+-- the topic id, topic description and the corresponding count.
+
+SELECT t.id,
+	   t.description,
+       count(ba.topicid) AS count
+FROM topic t
+LEFT JOIN blurt_analysis ba
+	ON ba.topicid = t.id 
+GROUP BY t.id, t.description
+ORDER BY t.id;
+
+-- 2
+-- For each celebrity user, find the total number of followers. Your SQL query
+-- should print the name of the celebrity and the corresponding number of
+-- followers.
+
+SELECT name AS celebrity,
+       count(f.follower) AS follower_num
+FROM user u
+LEFT JOIN follow f
+	ON u.email = f.followee
+WHERE u.email IN (SELECT email FROM celebrity)
+GROUP BY email,name;
+
+-- 3
+-- For each celebrity, find the number of blurts. Order the result in decreasing
+-- order of the number of blurts. Your query should print the name of the
+-- celebrity and the associated count in decreasing order of the count.
+
+SELECT u.name AS celebrity,
+	   max(b.blurtid) AS blurt_num
+FROM user u
+LEFT JOIN blurt b
+	ON u.email = b.email
+WHERE u.email IN (SELECT email FROM celebrity)
+GROUP BY  u.email, u.name
+ORDER BY blurt_num DESC;
+
+-- 4
+-- Write an SQL query to print names of all celebrities who are not following
+-- anyone!
+
+SELECT name AS celebrity
+FROM user 
+WHERE email IN (SELECT email FROM celebrity)
+	AND email NOT IN (SELECT follower FROM follow);
+
+-- 5
+-- Write an SQL query that gives the email of its brand ambassador and the
+-- number users who are following the brand ambassador for each vendor. Your
+-- SQL query should print the vendor name, email and the total number of users
+-- who are following it.
+
+SELECT (select name from vendor where id=va.vendorid) AS vendor,
+	   va.email,
+       count(f.followee) AS follower_num
+FROM vendor_ambassador va
+LEFT JOIN follow f
+	ON va.email = f.followee
+GROUP BY va.vendorid, va.email;
+
+-- 6
+-- Let us define the term "advertisement-gap" as the number of users who have
+-- blurted about a topic that is of interest to a vendor but are not being shown in
+-- any advertisements from the vendor. Write an SQL query that gives the vendor
+-- name and the corresponding "advertisement-gap" in decreasing order of the
+-- advertisement_gap.
+
+SELECT (select name from vendor where id=t1.vendorid) AS vendor,
+       count(DISTINCT t1.email) AS advertisement_gap
+FROM (SELECT ba.email as email,vt.vendorid as vendorid
+	  FROM blurt_analysis ba
+	  NATURAL JOIN vendor_topics vt
+	  GROUP BY ba.email,vt.vendorid) t1
+left join
+	 (SELECT ua.email as email, a.vendorid as vendorid
+	  FROM user_ad ua
+	  LEFT JOIN advertisement a
+		ON ua.adid = a.id) t2
+    ON t1.vendorid = t2.vendorid AND t1.email = t2.email
+WHERE t2.email IS NULL
+GROUP BY t1.vendorid
+ORDER BY advertisement_gap DESC;
+
+-- 7
+-- Write an SQL query to find all pairs of users (A,B) such that both A and B
+-- have blurted on a common topic but A is not following B. Your query should
+-- print the names of A and B in that order.
+
+SELECT (SELECT name FROM user WHERE email = ba1.email) as name_A,
+       (SELECT name FROM user WHERE email = ba2.email) as name_B
+FROM blurt_analysis ba1, blurt_analysis ba2
+WHERE ba1.email <> ba2.email AND ba1.topicid =ba2.topicid
+	AND ba1.email NOT IN (SELECT follower
+                          FROM follow f
+                          WHERE followee = ba2.email )
+GROUP BY ba1.email, ba2.email;
+
+-- 8
+-- You need to help users connect with other users. There could be three different
+-- users A,B and C such that A follows B, B follows C but A does not follow C.
+-- Write an SQL query to find all such triplets of A,B, and C. Your query should
+-- print the emails of users A,B and C in that order.
+
+SELECT f1.follower AS A,
+	   f1.followee AS B,
+       f2.followee AS C
+FROM follow f1
+LEFT JOIN follow f2
+	ON f1.followee = f2.follower
+WHERE f1.follower NOT IN (SELECT follower
+						  FROM follow f3
+                          WHERE f3.followee = f2.followee)
+	  AND f1.follower <> f2.followee;
+
+-- 9
+-- For each topic, find the states (e.g., California) where “the average sentiment
+-- associated with the blurts related to the topic” is negative. Your query should
+-- print the topic id, topic name, state, total # of blurts and average sentiment for
+-- each topic.
+
+SELECT topicid,
+       (SELECT description FROM topic WHERE id = topicid) AS topic_name,
+       location,
+       count(*) AS blurt_num,
+       avg(sentiment) AS avg_sentiment
+FROM blurt_analysis ba
+LEFT JOIN blurt b
+	ON ba.email = b.email AND ba.blurtid=b.blurtid
+GROUP BY ba.topicid, location
+HAVING avg_sentiment < 0;
+
+
